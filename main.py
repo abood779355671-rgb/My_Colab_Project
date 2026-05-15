@@ -4,26 +4,21 @@ import glob
 from flask import Flask
 import threading
 
-# ⚠️ إصلاح Pyrogram لبايثون 3.14
+# ⚠️ إصلاح مشكلة Python 3.14 مع Pyrogram
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
 import config
 from config import Client
 
-# تشغيل حلقة التنظيف التلقائي
-from Plugins.auto_clean import _auto_clean_loop
-asyncio.create_task(_auto_clean_loop(Client))
-print("✅ حلقة التنظيف التلقائي تعمل")
-
-# حذف جلسات قديمة
+# حذف ملفات الجلسة القديمة
 for f in glob.glob("my_bot*"):
     try:
         os.remove(f)
     except:
         pass
 
-# خادم Flask لفتح المنفذ
+# خادم Flask لفتح المنفذ المطلوب من Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -33,6 +28,10 @@ def home():
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
+# تشغيل حلقة التنظيف التلقائي
+from Plugins.auto_clean import _auto_clean_loop
+asyncio.create_task(_auto_clean_loop(Client))
+print("✅ حلقة التنظيف التلقائي تعمل")
 
 # تشغيل Flask في خيط منفصل
 threading.Thread(target=run_flask, daemon=True).start()
