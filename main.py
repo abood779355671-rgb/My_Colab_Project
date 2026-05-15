@@ -11,6 +11,11 @@ asyncio.set_event_loop(loop)
 import config
 from config import Client
 
+# تشغيل حلقة التنظيف التلقائي
+from Plugins.auto_clean import _auto_clean_loop
+asyncio.create_task(_auto_clean_loop(Client))
+print("✅ حلقة التنظيف التلقائي تعمل")
+
 # حذف جلسات قديمة
 for f in glob.glob("my_bot*"):
     try:
