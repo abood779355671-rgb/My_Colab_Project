@@ -1,21 +1,28 @@
 import asyncio
-import glob
 import os
-import sys
+from flask import Flask
+import threading
 
-# ⚠️ إصلاح مشكلة Python 3.14 مع Pyrogram 2.0.106
+# إصلاح Pyrogram لبايثون 3.14
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-import config
 from config import Client
+import config
 
-# حذف ملفات الجلسة القديمة
-for f in glob.glob("my_bot*"):
-    try:
-        os.remove(f)
-    except:
-        pass
+# خادم Flask لفتح المنفذ
+app_flask = Flask(__name__)
+
+@app_flask.route('/')
+def home():
+    return "Bot is running"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8000))
+    app_flask.run(host="0.0.0.0", port=port)
+
+# تشغيل Flask في خيط منفصل
+threading.Thread(target=run_flask, daemon=True).start()
 
 async def main():
     async with Client:
@@ -24,7 +31,4 @@ async def main():
         await asyncio.sleep(float("inf"))
 
 if __name__ == "__main__":
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        print("تم إيقاف البوت")
+    loop.run_until_complete(main())
