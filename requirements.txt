@@ -3,5 +3,10 @@ tgcrypto
 redis
 pytz
 Pillow
-httpx
+http2
 flask
+meval
+pytio
+psutil
+cpuinfo
+lsb-release
