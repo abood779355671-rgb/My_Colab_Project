@@ -27,7 +27,7 @@ _pending: dict = {}
 # جمع الرسائل الواردة
 # ────────────────────────────────────────────────────────────
 
-@Client.on_message(filters.group & filters.media, group=1)
+@Client.on_message(filters.group & filters.media, group=2)
 async def _collect_media(c: Client, m: Message):
     if not group_enabled(m.chat.id):
         return
@@ -93,7 +93,7 @@ async def _auto_clean_loop(client: Client):
 # أوامر التحكم
 # ────────────────────────────────────────────────────────────
 
-@Client.on_message(filters.group & filters.text, group=29)
+@Client.on_message(filters.group & filters.text, group=35)
 async def clean_commands(c: Client, m: Message):
     if not m.from_user:
         return
