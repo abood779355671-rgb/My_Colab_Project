@@ -17,11 +17,6 @@ for f in glob.glob("my_bot*"):
         os.remove(f)
     except:
         pass
-        
-# تشغيل حلقة التنظيف التلقائي
-from Plugins.auto_clean import _auto_clean_loop
-asyncio.create_task(_auto_clean_loop(Client))
-print("✅ حلقة التنظيف التلقائي تعمل")
 
 # خادم Flask لفتح المنفذ
 flask_app = Flask(__name__)
@@ -38,9 +33,16 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 async def main():
+    from Plugins.auto_clean import _auto_clean_loop
+
     async with Client:
         me = await Client.get_me()
         print(f"✅ البوت شغال: @{me.username}")
+
+        # ✅ هنا الصح: داخل async وبعد ما يشتغل Client
+        asyncio.get_event_loop().create_task(_auto_clean_loop(Client))
+        print("✅ حلقة التنظيف التلقائي تعمل")
+
         await asyncio.sleep(float("inf"))
 
 if __name__ == "__main__":
