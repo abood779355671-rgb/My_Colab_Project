@@ -3,7 +3,8 @@ tgcrypto
 redis
 pytz
 Pillow
-http2
+httpx
+h2
 flask
 meval
 pytio
