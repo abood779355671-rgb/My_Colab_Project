@@ -10,3 +10,4 @@ meval
 pytio
 psutil
 py-cpuinfo
+requests
