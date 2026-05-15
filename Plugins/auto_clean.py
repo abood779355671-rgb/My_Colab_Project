@@ -5,12 +5,10 @@
   تعطيل التنظيف              → إيقاف التنظيف التلقائي (مالك أساسي+)
   وضع وقت التنظيف [ثواني]   → تحديد مدة الانتظار قبل الحذف (60-3600 ثانية) (مالك أساسي+)
   وقت التنظيف                → عرض المدة الحالية المضبوطة (مالك أساسي+)
-
-ملاحظة: يحذف الصور والفيديو والملصقات والملفات وما شابهها،
-         ولا يحذف الصوت والفويس والألعاب.
 """
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 
 from pyrogram import Client, filters
@@ -21,11 +19,8 @@ from config import r, DEV_ID, botkey
 from helpers.ranks import is_gowner
 from helpers.utils import group_enabled, resolve_text
 
-# ────────────────────────────────────────────────────────────
-# قاعدة بيانات الرسائل المنتظرة (في الذاكرة)
-# ────────────────────────────────────────────────────────────
 # { chat_id: [{"id": msg_id, "time": datetime}, ...] }
-_pending: dict[int, list[dict]] = {}
+_pending: dict = {}
 
 
 # ────────────────────────────────────────────────────────────
@@ -34,24 +29,23 @@ _pending: dict[int, list[dict]] = {}
 
 @Client.on_message(filters.group & filters.media, group=1)
 async def _collect_media(c: Client, m: Message):
-    """يستقبل كل رسالة وسائط ويضيفها لقائمة الانتظار إن كان التنظيف مفعّلاً."""
     if not group_enabled(m.chat.id):
         return
 
-    # تخطي الصوت والفويس والألعاب (مثل clean.py الأصلي)
+    # تخطي الصوت والفويس والألعاب
     if m.audio or m.voice or m.game:
         return
 
-    if not r.get(f"{DEV_ID}{m.chat.id}:ena-clean"):
+    # مفتاح Redis: DEVID:CHATID:ena-clean  (نفس مفتاح أوامر التحكم)
+    if not r.get(f"{DEV_ID}:{m.chat.id}:ena-clean"):
         return
 
-    secs = int(r.get(f"{DEV_ID}{m.chat.id}:clean-secs") or "60")
+    secs = int(r.get(f"{DEV_ID}:{m.chat.id}:clean-secs") or "60")
     delete_at = datetime.now() + timedelta(seconds=secs)
 
     if m.chat.id not in _pending:
         _pending[m.chat.id] = []
 
-    # ألبوم (media group): أضف كل رسائل الألبوم
     if m.media_group_id:
         try:
             group_msgs = await c.get_media_group(m.chat.id, m.id)
@@ -64,11 +58,12 @@ async def _collect_media(c: Client, m: Message):
 
 
 # ────────────────────────────────────────────────────────────
-# حلقة الحذف التلقائي (تعمل في الخلفية)
+# حلقة الحذف التلقائي
 # ────────────────────────────────────────────────────────────
 
 async def _auto_clean_loop(client: Client):
     """تدور كل 1.7 ثانية وتحذف الرسائل التي حان وقتها."""
+    print("[auto_clean] ✅ الحلقة تعمل")
     while True:
         try:
             await asyncio.sleep(1.7)
@@ -85,27 +80,13 @@ async def _auto_clean_loop(client: Client):
                 if to_delete:
                     try:
                         await client.delete_messages(chat_id, to_delete)
+                        print(f"[auto_clean] حذف {len(to_delete)} رسالة من {chat_id}")
                     except FloodWait as fw:
                         await asyncio.sleep(fw.value)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[auto_clean] خطأ حذف: {e}")
         except Exception as e:
-            print(f"[auto_clean] خطأ: {e}")
-
-
-# ────────────────────────────────────────────────────────────
-# تسجيل حلقة الحذف عند بدء البوت
-# ────────────────────────────────────────────────────────────
-
-@Client.on_message(filters.private & filters.command("start"), group=-9999)
-async def _start_clean_loop(c: Client, m: Message):
-    """حيلة لتشغيل الحلقة مرة واحدة عند أول /start (fallthrough)."""
-    pass
-
-
-async def _init_loop(client: Client):
-    """يُستدعى من main.py لبدء الحلقة."""
-    asyncio.create_task(_auto_clean_loop(client))
+            print(f"[auto_clean] خطأ عام: {e}")
 
 
 # ────────────────────────────────────────────────────────────
@@ -125,49 +106,44 @@ async def clean_commands(c: Client, m: Message):
     cid = m.chat.id
     mention = m.from_user.mention
 
-    def reply(msg):
-        return m.reply(msg)
-
     def need_gowner():
         if not is_gowner(uid, cid):
-            reply(f"{k} هذا الأمر يخص ( المالك الأساسي وفوق ) بس")
+            m.reply(f"{k} هذا الأمر يخص ( المالك الأساسي وفوق ) بس")
             return True
         return False
 
     # ── تعطيل التنظيف ──
     if text == "تعطيل التنظيف":
         if need_gowner(): return
-        if not r.get(f"{DEV_ID}{cid}:ena-clean"):
-            return reply(f"{k} من 「 {mention} 」\n{k} التنظيف معطّل من قبل\n☆")
-        r.delete(f"{DEV_ID}{cid}:ena-clean")
-        # امسح الرسائل المنتظرة لهذه المجموعة
+        if not r.get(f"{DEV_ID}:{cid}:ena-clean"):
+            return await m.reply(f"{k} من 「 {mention} 」\n{k} التنظيف معطّل من قبل\n☆")
+        r.delete(f"{DEV_ID}:{cid}:ena-clean")
         _pending.pop(cid, None)
-        return reply(f"{k} من 「 {mention} 」\n{k} ابشر عطّلت التنظيف\n☆")
+        return await m.reply(f"{k} من 「 {mention} 」\n{k} ابشر عطّلت التنظيف\n☆")
 
     # ── تفعيل التنظيف ──
     if text == "تفعيل التنظيف":
         if need_gowner(): return
-        if r.get(f"{DEV_ID}{cid}:ena-clean"):
-            return reply(f"{k} من 「 {mention} 」\n{k} التنظيف مفعّل من قبل\n☆")
-        r.set(f"{DEV_ID}{cid}:ena-clean", 1)
-        return reply(f"{k} من 「 {mention} 」\n{k} ابشر فعّلت التنظيف\n☆")
+        if r.get(f"{DEV_ID}:{cid}:ena-clean"):
+            return await m.reply(f"{k} من 「 {mention} 」\n{k} التنظيف مفعّل من قبل\n☆")
+        r.set(f"{DEV_ID}:{cid}:ena-clean", 1)
+        return await m.reply(f"{k} من 「 {mention} 」\n{k} ابشر فعّلت التنظيف\n☆")
 
     # ── وضع وقت التنظيف [ثواني] ──
-    import re
     if re.search(r"^وضع وقت التنظيف \d+$", text):
         if need_gowner(): return
         secs = int(text.split()[-1])
         if secs < 60 or secs > 3600:
-            return reply(f"{k} عليك تحديد وقت التنظيف بالثواني من 60 إلى 3600 ثانية")
-        r.set(f"{DEV_ID}{cid}:clean-secs", secs)
-        return reply(f"{k} تم تعيين وقت التنظيف ( {secs} ) ثانية")
+            return await m.reply(f"{k} عليك تحديد وقت التنظيف بالثواني من 60 إلى 3600 ثانية")
+        r.set(f"{DEV_ID}:{cid}:clean-secs", secs)
+        return await m.reply(f"{k} تم تعيين وقت التنظيف ( {secs} ) ثانية")
 
     # ── وقت التنظيف ──
     if text == "وقت التنظيف":
         if need_gowner(): return
-        secs = r.get(f"{DEV_ID}{cid}:clean-secs") or "60"
-        status = "مفعّل ✅" if r.get(f"{DEV_ID}{cid}:ena-clean") else "معطّل ❌"
-        return reply(
+        secs = r.get(f"{DEV_ID}:{cid}:clean-secs") or "60"
+        status = "مفعّل ✅" if r.get(f"{DEV_ID}:{cid}:ena-clean") else "معطّل ❌"
+        return await m.reply(
             f"{k} إعدادات التنظيف:\n"
             f"الحالة: {status}\n"
             f"مدة الانتظار: `{secs}` ثانية"
