@@ -9,5 +9,5 @@ flask
 meval
 pytio
 psutil
-cpuinfo
+py-cpuinfo
 lsb-release
