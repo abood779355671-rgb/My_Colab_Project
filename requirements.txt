@@ -10,4 +10,3 @@ meval
 pytio
 psutil
 py-cpuinfo
-lsb-release
