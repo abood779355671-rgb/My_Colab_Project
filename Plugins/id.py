@@ -175,7 +175,7 @@ async def add_edited_msg_count(c: Client, m: Message):
 # معالج الأوامر الرئيسي
 # ─────────────────────────────────────────────────────────────────────────
 
-@Client.on_message(filters.text & filters.group, group=11)
+@Client.on_message(filters.text & filters.group, group=13)
 async def id_handler(c: Client, m: Message):
     if not m.from_user:
         return
